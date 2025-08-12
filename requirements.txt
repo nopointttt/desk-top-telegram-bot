@@ -1,0 +1,21 @@
+# Telegram Bot Framework (latest stable)
+aiogram==3.8.0
+
+# Pydantic v2 (required by Aiogram 3)
+pydantic==2.8.2
+
+# Database (PostgreSQL ORM)
+sqlalchemy[asyncpg]==2.0.31
+
+# API Clients
+openai==1.35.13
+pinecone-client==4.1.2
+
+# Environment Variables & Config
+python-dotenv==1.0.1
+
+# Tokenizer for context control
+tiktoken==0.7.0
+
+# Error monitoring
+sentry-sdk==2.8.0
