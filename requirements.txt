@@ -1,11 +1,12 @@
-# Telegram Bot Framework (latest stable)
+# Telegram Bot Framework
 aiogram==3.8.0
 
-# Pydantic v2 (required by Aiogram 3)
-pydantic==2.8.2
+# Pydantic v2 (compatible with Aiogram 3.8.0)
+pydantic==2.7.1
 
 # Database (PostgreSQL ORM)
-sqlalchemy[asyncpg]==2.0.31
+sqlalchemy==2.0.31
+asyncpg==0.29.0  # <-- Явно добавляем драйвер
 
 # API Clients
 openai==1.35.13
