@@ -7,7 +7,7 @@ from src.config import OPENAI_API_KEY
 class LLMClient:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-        # --- НОВЫЙ КОД ---
+        # --- НАЧАЛО НОВОГО КОДА ---
         try:
             self.encoding = tiktoken.encoding_for_model("gpt-4o")
         except Exception as e:
@@ -23,7 +23,6 @@ class LLMClient:
     async def get_response(
         self, system_prompt: str, message_history: list, user_message: str, rag_context: list[str] = None
     ) -> str:
-        # ... (этот метод без изменений)
         if rag_context:
             rag_info = "\n\n".join(rag_context)
             system_prompt_with_rag = (
@@ -36,9 +35,11 @@ class LLMClient:
             )
         else:
             system_prompt_with_rag = system_prompt
+        
         messages = [{"role": "system", "content": system_prompt_with_rag}]
         messages.extend(message_history)
         messages.append({"role": "user", "content": user_message})
+
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4o", messages=messages
@@ -49,7 +50,6 @@ class LLMClient:
             return "Произошла ошибка при обращении к AI."
 
     async def get_summary(self, message_history: list) -> str:
-        # ... (этот метод без изменений)
         summary_prompt = (
             "Подведи краткие, но емкие итоги этого диалога для "
             "сохранения в базу знаний. Сконцентрируйся на ключевых фактах, "

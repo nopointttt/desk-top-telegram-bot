@@ -5,8 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from src.db.models import Base
 from src.config import DATABASE_URL
 
-# --- НАЧАЛО ИЗМЕНЕНИЯ ---
-# Убираем глобальные переменные, создаем "контейнер" для них
+# Создаем "контейнер" для хранения подключения
 class Database:
     def __init__(self):
         self.engine = None
@@ -22,7 +21,6 @@ async def db_init():
     )
     async with db.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-# --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Зависимость для получения сессии БД."""
