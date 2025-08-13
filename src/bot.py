@@ -5,26 +5,26 @@ from aiogram.types import Update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import TELEGRAM_TOKEN
-from src.handlers import general, session as session_handlers
+from src.handlers import general, session as session_handlers, personalization
 from src.db.session import AsyncSessionLocal
 
-# Middleware для передачи сессии БД в обработчики
 async def db_session_middleware(handler, event: Update, data: dict):
     async with AsyncSessionLocal() as session:
         data['session'] = session
         return await handler(event, data)
 
 async def main():
-    """Основная функция для запуска бота."""
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()
 
-    # Подключаем middleware
     dp.update.middleware(db_session_middleware)
 
-    # Подключаем роутеры
+    # --- НАЧАЛО ИСПРАВЛЕНИЯ ---
+    # Сначала регистрируем более специфичные роутеры, потом общие
     dp.include_router(general.router)
-    dp.include_router(session_handlers.router)
+    dp.include_router(personalization.router) # <-- ПЕРСОНАЛИЗАЦИЯ ИДЕТ РАНЬШЕ
+    dp.include_router(session_handlers.router)   # <-- ОБЩИЙ ОБРАБОТЧИК ИДЕТ ПОЗЖЕ
+    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     logging.info("Starting bot...")
     try:

@@ -6,10 +6,10 @@ pydantic==2.7.1
 
 # Database (PostgreSQL ORM)
 sqlalchemy==2.0.31
-asyncpg==0.29.0  # <-- Явно добавляем драйвер
+asyncpg==0.29.0
 
 # API Clients
-openai==1.35.13
+openai  # <-- Убираем версию, чтобы установить последнюю
 pinecone-client==4.1.2
 
 # Environment Variables & Config
