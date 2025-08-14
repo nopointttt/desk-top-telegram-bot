@@ -10,3 +10,14 @@ profile_keyboard = ReplyKeyboardMarkup(
     one_time_keyboard=True,
     input_field_placeholder="Выберите один из профилей"
 )
+
+# --- НОВЫЙ КОД ---
+confirm_deletion_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Да, удалить все мои данные")],
+        [KeyboardButton(text="Отмена")]
+    ],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+# --- КОНЕЦ НОВОГО КОДА ---

@@ -7,7 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from src.config import TELEGRAM_TOKEN
-from src.handlers import general, session as session_handlers, personalization
+from src.handlers import general, session as session_handlers, personalization, data_management
 from src.db.session import db
 from src.db.repository import SessionRepository
 from src.services.llm_client import LLMClient
@@ -18,13 +18,10 @@ async def db_session_middleware(handler, event: Update, data: dict):
         data['session'] = session
         return await handler(event, data)
 
-# --- НАЧАЛО НОВОГО КОДА ---
 async def scheduled_cleanup(session_maker):
-    """Функция, которую будет вызывать планировщик."""
     async with session_maker() as session:
         repo = SessionRepository(session)
         await repo.delete_old_sessions()
-# --- КОНЕЦ НОВОГО КОДА ---
 
 async def main():
     bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -36,16 +33,19 @@ async def main():
 
     dp.update.middleware(db_session_middleware)
     
+    # --- ИСПРАВЛЕННЫЙ ПОРЯДОК ---
+    # Сначала регистрируем роутеры с конкретными командами
     dp.include_router(general.router)
     dp.include_router(personalization.router)
+    dp.include_router(data_management.router)
+    
+    # В самом конце регистрируем роутер с "ловцом" всех остальных сообщений
     dp.include_router(session_handlers.router)
+    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
-    # --- НАЧАЛО НОВОГО КОДА ---
-    # Настройка и запуск планировщика
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     scheduler.add_job(scheduled_cleanup, trigger='interval', days=1, kwargs={'session_maker': db.AsyncSessionLocal})
     scheduler.start()
-    # --- КОНЕЦ НОВОГО КОДА ---
 
     logging.info("Starting bot...")
     try:

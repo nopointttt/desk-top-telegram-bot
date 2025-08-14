@@ -4,7 +4,7 @@ import json
 import asyncio
 from aiogram import Router, F, Bot
 from aiogram.enums import ChatAction
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.repository import UserRepository, SessionRepository, PersonalizedPromptRepository
@@ -12,11 +12,12 @@ from src.services.llm_client import LLMClient
 from src.services.rag_client import RAGClient
 
 router = Router()
-# ... (код до handle_text_message без изменений)
 profile_choice_keyboard = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Кодер"), KeyboardButton(text="Продакт менеджер")], [KeyboardButton(text="Личный ассистент")]], resize_keyboard=True, one_time_keyboard=True)
+
 @router.message(Command("start_session"))
 async def cmd_start_session(message: Message):
     await message.answer("С каким профилем начать сессию?", reply_markup=profile_choice_keyboard)
+
 @router.message(F.text.in_({"Кодер", "Продакт менеджер", "Личный ассистент"}))
 async def process_profile_choice(message: Message, session: AsyncSession):
     profile_map = { "Кодер": "coder", "Продакт менеджер": "product_manager", "Личный ассистент": "personal_assistant" }
@@ -25,10 +26,9 @@ async def process_profile_choice(message: Message, session: AsyncSession):
     session_repo = SessionRepository(session)
     user = await user_repo.get_or_create_user(telegram_id=message.from_user.id, username=message.from_user.username)
     new_db_session = await session_repo.start_new_session(user, profile)
-    await message.answer(f"Новая сессия #{new_db_session.id} с профилем '{message.text}' начата. Что будем делать?")
+    await message.answer(f"Новая сессия #{new_db_session.id} с профилем '{message.text}' начата. Что будем делать?", reply_markup=ReplyKeyboardRemove())
 
-# --- ОБНОВЛЕННЫЙ ОБРАБОТЧИК ---
-@router.message()
+@router.message(F.content_type.in_({'text'}))
 async def handle_text_message(message: Message, session: AsyncSession, bot: Bot, llm_client: LLMClient, rag_client: RAGClient):
     user_id = message.from_user.id
     session_repo = SessionRepository(session)
@@ -46,9 +46,8 @@ async def handle_text_message(message: Message, session: AsyncSession, bot: Bot,
             await status_message.edit_text("Профиль не настроен. Начните с /personalize")
             return
         
-        # --- НАЧАЛО ИСПРАВЛЕНИЯ: Защита от пустой истории ---
-        history_str = active_session.message_history or '[]'
-        history = json.loads(history_str)
+        # --- ИСПРАВЛЕНИЕ: Убираем ручной json.loads. Репозиторий уже вернул нам list. ---
+        history = active_session.message_history
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         await asyncio.sleep(0.5)
@@ -79,7 +78,7 @@ async def handle_text_message(message: Message, session: AsyncSession, bot: Bot,
         await session_repo.update_message_history(active_session.id, {"role": "user", "content": message.text})
         await session_repo.update_message_history(active_session.id, {"role": "assistant", "content": response_text})
     except Exception as e:
-        logging.error(f"Error in handle_text_message: {e}")
+        logging.error(f"Error in handle_text_message: {e}", exc_info=True)
         await status_message.edit_text("Произошла непредвиденная ошибка.")
 
 @router.message(Command("end_session"))
@@ -90,10 +89,11 @@ async def cmd_end_session(message: Message, session: AsyncSession, llm_client: L
         await message.answer("У вас нет активных сессий.")
         return
     await message.answer("Подвожу итоги сессии...")
-    # --- НАЧАЛО ИСПРАВЛЕНИЯ: Защита от пустой истории ---
-    history_str = active_session.message_history or '[]'
-    history = json.loads(history_str)
+
+    # --- ИСПРАВЛЕНИЕ: Убираем ручной json.loads ---
+    history = active_session.message_history
     # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
     if history:
         summary = await llm_client.get_summary(history)
         await rag_client.save_summary(active_session.id, message.from_user.id, summary)
@@ -101,7 +101,6 @@ async def cmd_end_session(message: Message, session: AsyncSession, llm_client: L
     await repo.close_all_active_sessions(message.from_user.id)
     await message.answer(f"Сессия #{active_session.id} завершена. Итоги сохранены.")
 
-# ... (остальной код без изменений) ...
 @router.message(Command("list_sessions"))
 async def cmd_list_sessions(message: Message, session: AsyncSession):
     repo = SessionRepository(session)
