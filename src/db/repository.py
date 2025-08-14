@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import delete
 from src.db.models import User, Session, PersonalizedPrompt
+from src.config import DAILY_TOKEN_LIMIT
 
 class UserRepository:
     def __init__(self, session: AsyncSession):
@@ -36,9 +37,29 @@ class UserRepository:
         await self.session.commit()
         logging.info(f"All data for user {telegram_id} has been deleted.")
 
+    async def check_and_update_limits(self, user: User, tokens_to_add: int) -> bool:
+        """
+        Проверяет лимиты пользователя. Сбрасывает счетчик, если наступил новый день.
+        Возвращает True, если лимит не превышен, иначе False.
+        """
+        today = datetime.date.today()
+        
+        if user.last_request_date != today:
+            user.tokens_used_today = 0
+            user.last_request_date = today
+
+        if user.tokens_used_today + tokens_to_add > DAILY_TOKEN_LIMIT:
+            logging.warning(f"User {user.telegram_id} has exceeded the daily token limit.")
+            return False
+        
+        user.tokens_used_today += tokens_to_add
+        await self.session.commit()
+        return True
+
 class PersonalizedPromptRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
     async def save_or_update_prompt(self, user_id: int, profile: str, prompt_text: str):
         stmt = select(PersonalizedPrompt).where(
             PersonalizedPrompt.user_id == user_id,
@@ -54,6 +75,7 @@ class PersonalizedPromptRepository:
             )
             self.session.add(existing_prompt)
         await self.session.commit()
+
     async def get_prompt(self, user_id: int, profile: str) -> str | None:
         stmt = select(PersonalizedPrompt.prompt_text).where(
             PersonalizedPrompt.user_id == user_id,
@@ -112,13 +134,11 @@ class SessionRepository:
         sessions = result.scalars().all()
         return [self._deserialize_history(s) for s in sessions]
 
-    # --- ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ ---
     async def update_message_history(self, session_id: int, new_message: dict):
         active_session = await self.session.get(Session, session_id)
         if active_session:
             history_val = active_session.message_history
             
-            # 1. Надежно получаем историю в виде списка, независимо от ее текущего типа
             if isinstance(history_val, list):
                 history_list = history_val
             elif isinstance(history_val, str):
@@ -128,13 +148,9 @@ class SessionRepository:
             else:
                 history_list = []
 
-            # 2. Добавляем новое сообщение
             history_list.append(new_message)
-            
-            # 3. Сериализуем обратно в строку для записи в БД
             active_session.message_history = json.dumps(history_list, ensure_ascii=False)
             await self.session.commit()
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     async def delete_old_sessions(self, days: int = 30):
         logging.info(f"Running scheduled job: Deleting sessions older than {days} days.")

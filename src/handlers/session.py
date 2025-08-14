@@ -12,6 +12,8 @@ from src.services.llm_client import LLMClient
 from src.services.rag_client import RAGClient
 
 router = Router()
+logger = logging.getLogger(__name__) # <-- Создаем логгер для модуля
+
 profile_choice_keyboard = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Кодер"), KeyboardButton(text="Продакт менеджер")], [KeyboardButton(text="Личный ассистент")]], resize_keyboard=True, one_time_keyboard=True)
 
 @router.message(Command("start_session"))
@@ -26,12 +28,27 @@ async def process_profile_choice(message: Message, session: AsyncSession):
     session_repo = SessionRepository(session)
     user = await user_repo.get_or_create_user(telegram_id=message.from_user.id, username=message.from_user.username)
     new_db_session = await session_repo.start_new_session(user, profile)
+
+    # --- АНАЛИТИКА ---
+    logger.info(f"ANALYTICS - Event: SessionStarted, UserID: {message.from_user.id}, Details: {{'session_id': {new_db_session.id}, 'profile': '{profile}'}}")
+    # --- КОНЕЦ АНАЛИТИКИ ---
+
     await message.answer(f"Новая сессия #{new_db_session.id} с профилем '{message.text}' начата. Что будем делать?", reply_markup=ReplyKeyboardRemove())
 
 @router.message(F.content_type.in_({'text'}))
 async def handle_text_message(message: Message, session: AsyncSession, bot: Bot, llm_client: LLMClient, rag_client: RAGClient):
     user_id = message.from_user.id
+    user_repo = UserRepository(session)
     session_repo = SessionRepository(session)
+    
+    user = await user_repo.get_or_create_user(user_id, message.from_user.username)
+    
+    request_tokens = llm_client.count_tokens(message.text)
+    
+    if not await user_repo.check_and_update_limits(user, request_tokens):
+        await message.answer("Вы превысили суточный лимит использования токенов. Попробуйте снова завтра.")
+        return
+
     active_session = await session_repo.get_active_session(user_id)
     if not active_session:
         await message.answer("Нет активной сессии. Начните с /start_session")
@@ -46,9 +63,7 @@ async def handle_text_message(message: Message, session: AsyncSession, bot: Bot,
             await status_message.edit_text("Профиль не настроен. Начните с /personalize")
             return
         
-        # --- ИСПРАВЛЕНИЕ: Убираем ручной json.loads. Репозиторий уже вернул нам list. ---
         history = active_session.message_history
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         await asyncio.sleep(0.5)
         log_text += "\n`-> Ищу релевантную информацию в памяти...`"
@@ -65,6 +80,9 @@ async def handle_text_message(message: Message, session: AsyncSession, bot: Bot,
             system_prompt, history, message.text, rag_context=relevant_summaries
         )
 
+        response_tokens = llm_client.count_tokens(response_text)
+        await user_repo.check_and_update_limits(user, response_tokens)
+
         current_history_text = " ".join([msg['content'] for msg in history])
         token_count = llm_client.count_tokens(current_history_text)
         CONTEXT_WINDOW = 16000 
@@ -78,7 +96,7 @@ async def handle_text_message(message: Message, session: AsyncSession, bot: Bot,
         await session_repo.update_message_history(active_session.id, {"role": "user", "content": message.text})
         await session_repo.update_message_history(active_session.id, {"role": "assistant", "content": response_text})
     except Exception as e:
-        logging.error(f"Error in handle_text_message: {e}", exc_info=True)
+        logger.error(f"Error in handle_text_message: {e}", exc_info=True)
         await status_message.edit_text("Произошла непредвиденная ошибка.")
 
 @router.message(Command("end_session"))
@@ -90,13 +108,15 @@ async def cmd_end_session(message: Message, session: AsyncSession, llm_client: L
         return
     await message.answer("Подвожу итоги сессии...")
 
-    # --- ИСПРАВЛЕНИЕ: Убираем ручной json.loads ---
     history = active_session.message_history
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     if history:
         summary = await llm_client.get_summary(history)
         await rag_client.save_summary(active_session.id, message.from_user.id, summary)
+    
+    # --- АНАЛИТИКА ---
+    logger.info(f"ANALYTICS - Event: SessionEnded, UserID: {message.from_user.id}, Details: {{'session_id': {active_session.id}}}")
+    # --- КОНЕЦ АНАЛИТИКИ ---
     
     await repo.close_all_active_sessions(message.from_user.id)
     await message.answer(f"Сессия #{active_session.id} завершена. Итоги сохранены.")

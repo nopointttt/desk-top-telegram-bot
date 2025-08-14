@@ -23,8 +23,7 @@ DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 
 DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-# --- НОВЫЙ КОД ---
-# Encryption Key
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-# --- КОНЕЦ НОВОГО КОДА ---
+DAILY_TOKEN_LIMIT = int(os.getenv("DAILY_TOKEN_LIMIT", "20000"))
+# Sentry DSN
+SENTRY_DSN = os.getenv("SENTRY_DSN")
