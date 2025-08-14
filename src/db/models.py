@@ -1,17 +1,14 @@
 # Файл: C:\desk_top\src\db\models.py
 from sqlalchemy import (
     Column, Integer, String, BigInteger,
-    DateTime, Text, ForeignKey, func
+    DateTime, Text, ForeignKey, func 
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy_utils import EncryptedType
 from src.config import ENCRYPTION_KEY
 
-# --- НАЧАЛО ИСПРАВЛЕНИЯ 2 ---
-# Создаем кастомный тип, чтобы убрать SAWarning
 class CacheableEncryptedType(EncryptedType):
     cache_ok = True
-# --- КОНЕЦ ИСПРАВЛЕНИЯ 2 ---
 
 Base = declarative_base()
 
@@ -32,6 +29,7 @@ class Session(Base):
     active_profile = Column(String)
     initial_goal = Column(Text)
     final_summary_id = Column(String)
+    # --- ВОЗВРАЩАЕМ Text. Мы будем управлять JSON вручную в репозитории ---
     message_history = Column(CacheableEncryptedType(Text, ENCRYPTION_KEY))
     thinking_log = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
