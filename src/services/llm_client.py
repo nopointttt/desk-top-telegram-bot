@@ -1,11 +1,14 @@
 # Файл: C:\desk_top\src\services\llm_client.py
 import logging
 import tiktoken
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError, APITimeoutError, APIConnectionError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from src.config import OPENAI_API_KEY
 
-# Создаем логгер для этого модуля
 logger = logging.getLogger(__name__)
+
+# Определяем, какие ошибки считать временными и требующими повторной попытки
+RETRYABLE_OPENAI_ERRORS = (RateLimitError, APITimeoutError, APIConnectionError)
 
 class LLMClient:
     def __init__(self):
@@ -23,10 +26,14 @@ class LLMClient:
             return 0
         return len(self.encoding.encode(text))
 
+    @retry(
+        stop=stop_after_attempt(3), # Максимум 3 попытки
+        wait=wait_exponential(multiplier=1, min=2, max=10), # Ожидание: 2с, 4с, 8с...
+        retry=retry_if_exception_type(RETRYABLE_OPENAI_ERRORS) # Повторять только при определенных ошибках
+    )
     async def get_response(
         self, system_prompt: str, message_history: list, user_message: str, rag_context: list[str] = None
     ) -> str:
-        # ... (код формирования system_prompt_with_rag и messages без изменений) ...
         if rag_context:
             rag_info = "\n\n".join(rag_context)
             system_prompt_with_rag = (
@@ -49,7 +56,6 @@ class LLMClient:
                 model="gpt-4o", messages=messages
             )
             
-            # --- ЛОГИРОВАНИЕ РАСХОДОВ ---
             usage = response.usage
             if usage:
                 logger.info(
@@ -58,27 +64,30 @@ class LLMClient:
                     f"Completion Tokens={usage.completion_tokens}, "
                     f"Total Tokens={usage.total_tokens}"
                 )
-            # --- КОНЕЦ ЛОГИРОВАНИЯ ---
-
+            
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error communicating with OpenAI: {e}")
-            return "Произошла ошибка при обращении к AI."
+            raise # Перевыбрасываем ошибку, чтобы tenacity мог ее поймать
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(RETRYABLE_OPENAI_ERRORS)
+    )
     async def get_summary(self, message_history: list) -> str:
         summary_prompt = (
             "Подведи краткие, но емкие итоги этого диалога для "
             "сохранения в базу знаний. Сконцентрируйся на ключевых фактах, "
             "решениях и выводах. Текст должен быть в формате markdown."
         )
-        messages = message_history
-        messages.append({"role": "user", "content": summary_prompt})
+        messages = message_history + [{"role": "user", "content": summary_prompt}]
+
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-3.5-turbo", messages=messages
             )
             
-            # --- ЛОГИРОВАНИЕ РАСХОДОВ ---
             usage = response.usage
             if usage:
                 logger.info(
@@ -87,9 +96,8 @@ class LLMClient:
                     f"Completion Tokens={usage.completion_tokens}, "
                     f"Total Tokens={usage.total_tokens}"
                 )
-            # --- КОНЕЦ ЛОГИРОВАНИЯ ---
-
+            
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"Error creating summary: {e}")
-            return "Не удалось создать итоги сессии."
+            raise # Перевыбрасываем ошибку, чтобы tenacity мог ее поймать

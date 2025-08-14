@@ -27,3 +27,6 @@ apscheduler==3.10.4
 # For data encryption in DB
 sqlalchemy-utils==0.41.1
 cryptography==42.0.8
+
+# For retrying failed operations
+tenacity==8.2.3
