@@ -1,4 +1,4 @@
-# Файл: C:\desk_top\src\db\repository.py
+# Файл: C:/desk_top/src/db/repository.py
 import datetime
 import json
 import logging
@@ -38,20 +38,13 @@ class UserRepository:
         logging.info(f"All data for user {telegram_id} has been deleted.")
 
     async def check_and_update_limits(self, user: User, tokens_to_add: int) -> bool:
-        """
-        Проверяет лимиты пользователя. Сбрасывает счетчик, если наступил новый день.
-        Возвращает True, если лимит не превышен, иначе False.
-        """
         today = datetime.date.today()
-        
         if user.last_request_date != today:
             user.tokens_used_today = 0
             user.last_request_date = today
-
         if user.tokens_used_today + tokens_to_add > DAILY_TOKEN_LIMIT:
             logging.warning(f"User {user.telegram_id} has exceeded the daily token limit.")
             return False
-        
         user.tokens_used_today += tokens_to_add
         await self.session.commit()
         return True
@@ -89,12 +82,20 @@ class SessionRepository:
         self.session = session
 
     def _deserialize_history(self, session_obj: Session) -> Session:
+        """
+        Приватный метод для десериализации истории из строки в список.
+        Теперь устойчив к некорректным JSON-данным.
+        """
         if session_obj and session_obj.message_history:
             history_val = session_obj.message_history
-            if isinstance(history_val, str):
-                session_obj.message_history = json.loads(history_val)
-            elif isinstance(history_val, bytes):
-                session_obj.message_history = json.loads(history_val.decode('utf-8'))
+            try:
+                if isinstance(history_val, str):
+                    session_obj.message_history = json.loads(history_val)
+                elif isinstance(history_val, bytes):
+                    session_obj.message_history = json.loads(history_val.decode('utf-8'))
+            except json.JSONDecodeError:
+                logging.error(f"Failed to decode message_history for session_id={session_obj.id}. Treating as empty.")
+                session_obj.message_history = []
         elif session_obj:
             session_obj.message_history = []
         return session_obj
@@ -138,7 +139,6 @@ class SessionRepository:
         active_session = await self.session.get(Session, session_id)
         if active_session:
             history_val = active_session.message_history
-            
             if isinstance(history_val, list):
                 history_list = history_val
             elif isinstance(history_val, str):
@@ -147,7 +147,6 @@ class SessionRepository:
                  history_list = json.loads(history_val.decode('utf-8') or '[]')
             else:
                 history_list = []
-
             history_list.append(new_message)
             active_session.message_history = json.dumps(history_list, ensure_ascii=False)
             await self.session.commit()

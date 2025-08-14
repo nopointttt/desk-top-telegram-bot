@@ -1,0 +1,25 @@
+# Файл: .dockerignore
+
+# Исключаем виртуальное окружение
+venv
+.venv
+
+# Исключаем кэш Python
+__pycache__
+*.pyc
+
+# Исключаем файлы IDE и секреты
+.vscode
+.idea
+.env
+*.env
+
+# Исключаем лог-файлы и git
+*.log
+.git
+.gitignore
+
+# Исключаем тестовые и вспомогательные скрипты
+test_*.py
+check_*.py
+reset_db.py
