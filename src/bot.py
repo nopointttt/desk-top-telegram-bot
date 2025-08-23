@@ -8,10 +8,15 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from src.config import TELEGRAM_TOKEN
 from src.handlers import general, session as session_handlers, personalization, data_management
+from src.handlers import projects
+from src.handlers import modes
+from src.handlers import acl
+from src.handlers import context_mode
 from src.db.session import db
 from src.db.repository import SessionRepository
 from src.services.llm_client import LLMClient
 from src.services.rag_client import RAGClient
+from src.services.commands import get_main_menu_commands
 
 async def db_session_middleware(handler, event: Update, data: dict):
     async with db.AsyncSessionLocal() as session:
@@ -28,16 +33,7 @@ async def set_main_menu(bot: Bot):
     """
     Создает и устанавливает основное меню команд бота.
     """
-    main_menu_commands = [
-        BotCommand(command='/start', description='▶️ Запустить/перезапустить бота'),
-        BotCommand(command='/personalize', description='👤 Настроить профиль агента'),
-        BotCommand(command='/start_session', description='🚀 Начать новую сессию'),
-        BotCommand(command='/end_session', description='🛑 Завершить текущую сессию'),
-        BotCommand(command='/list_sessions', description='📋 Показать историю сессий'),
-        BotCommand(command='/export_data', description='📥 Скачать свои данные'),
-        BotCommand(command='/delete_my_data', description='🗑️ Удалить все свои данные')
-    ]
-    await bot.set_my_commands(main_menu_commands)
+    await bot.set_my_commands(get_main_menu_commands())
 # --- КОНЕЦ НОВОГО КОДА ---
 
 async def main():
@@ -53,6 +49,11 @@ async def main():
     dp.include_router(general.router)
     dp.include_router(personalization.router)
     dp.include_router(data_management.router)
+    # ВАЖНО: маршрутизатор проектов выше, чем общий обработчик текста
+    dp.include_router(projects.router)
+    dp.include_router(acl.router)
+    dp.include_router(modes.router)
+    dp.include_router(context_mode.router)
     dp.include_router(session_handlers.router)
 
     # --- НОВЫЙ КОД: Вызов функции установки меню ---

@@ -29,4 +29,4 @@ sqlalchemy-utils==0.41.1
 cryptography==42.0.8
 
 # For retrying failed operations
-tenacity==8.2.3
+tenacity==9.1.2
