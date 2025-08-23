@@ -11,3 +11,12 @@ class Personalization(StatesGroup):
 class DataManagement(StatesGroup):
     confirming_deletion = State()
 # --- КОНЕЦ НОВОГО КОДА ---
+
+# --- НОВЫЙ КОД: Проекты (FSM /new_project) ---
+class NewProject(StatesGroup):
+    entering_name = State()
+    entering_goal = State()
+    entering_context = State()
+    choosing_mode = State()
+    confirming = State()
+# --- КОНЕЦ НОВОГО КОДА ---
